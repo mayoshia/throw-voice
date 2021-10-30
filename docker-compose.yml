@@ -8,98 +8,55 @@ x-logging: &logging
 
 services:
   bot:
-    image: registry.gitlab.com/pawabot/pawa:${VERSION}
-    depends_on:
-      - datastore
+    image: mayoshia/pawa
+#    depends_on:
+#      - datastore
     deploy:
       resources:
         limits:
           cpus: 1
           memory: 6G
     environment:
-      - BOT_ACTIVITY=${BOT_ACTIVITY}
-      - BOT_DATA_DIR=${BOT_DATA_DIR}
-      - BOT_FILE_FORMAT=${BOT_FILE_FORMAT}
-      - BOT_HTTP_PORT=${BOT_HTTP_PORT}
-      - BOT_GUILD_WHITELIST=${BOT_GUILD_WHITELIST}
-      - BOT_LEAVE_GUILD_AFTER=${BOT_LEAVE_GUILD_AFTER}
-      - BOT_MAINTENANCE=${BOT_MAINTENANCE}
-      - BOT_MP3_VBR=${BOT_MP3_VBR}
-      - BOT_STANDALONE=${BOT_STANDALONE}
-      - BOT_TOKEN=${BOT_TOKEN}
-      - BOT_WEBSITE=${BOT_WEBSITE}
-      - DB_NAME=${DB_NAME}
-      - DB_HOST=${DB_HOST}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DS_ACCESS_KEY=${DS_ACCESS_KEY}
-      - DS_BASEURL=${DS_BASEURL}
-      - DS_BUCKET=${DS_BUCKET}
-      - DS_HOST=${DS_HOST}
-      - DS_SECRET_KEY=${DS_SECRET_KEY}
-      - OVERRIDE_FILE=${OVERRIDE_FILE}
-      - TRACING_API_KEY=${TRACING_API_KEY}
-      - TZ=${TZ}
-      - JAVA_TOOL_OPTIONS=-Dlog4j.configurationFile=log4j2-prod.xml
-                          -XX:MinRAMPercentage=${JVM_MIN_RAM_PERCENTAGE}
-                          -XX:MaxRAMPercentage=${JVM_MAX_RAM_PERCENTAGE}
+      - BOT_DATA_DIR=/data
+      - BOT_HTTP_PORT=3000
+      - BOT_LEAVE_GUILD_AFTER=365
+      - BOT_MAINTENANCE=false
+      - BOT_MP3_VBR=false
+      - BOT_STANDALONE=true
+      - BOT_TOKEN=NTYzNDQzNTI4NzI3MDAzMTM3.XKZZrQ.GKAZ_andI15jUwW10sAEqNFK3rw
+      - DS_ACCESS_KEY=MiNiOkEy
+#      - DS_BASEURL=http://localhost:9000/recordings
+      - DS_BUCKET=recordings
+#      - DS_HOST=http://localhost:9000
+#      - DS_SECRET_KEY=DS_SECRET_KEY
+      - TZ=Europe/Moscow
+      - JAVA_TOOL_OPTIONS=-Dlog4j.configurationFile=log4j2.xml
     ports:
-      - "127.0.0.1:1112:1112"
+      - "127.0.0.1:3000:3000"
     restart: on-failure:100
     volumes:
-      - data:${BOT_DATA_DIR}
+      - ./recordings:/app/recordings
       - ./logs:/app/logs
     logging:
       <<: *logging
-  database:
-    image: postgres@sha256:b6a3459825427f08ab886545c64d4e5754aa425c5eea678d5359f06a9bf7faab
-    deploy:
-      resources:
-        limits:
-          cpus: 1
-          memory: 2G
-    environment:
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=${DB_NAME}
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - db-data:/var/lib/postgresql/data
   datastore:
     image: minio/minio:RELEASE.2021-03-04T00-53-13Z
-    command: gateway s3 https://s3.us-west-001.backblazeb2.com
+    command: server /data
     deploy:
       resources:
         limits:
           cpus: 1
           memory: 1G
     environment:
-      - MINIO_ACCESS_KEY=${DS_ACCESS_KEY}
-      - MINIO_SECRET_KEY=${DS_SECRET_KEY}
+      - MINIO_ACCESS_KEY=MiNiOkEy
+      - MINIO_SECRET_KEY=DS_SECRET_KEY
       - TZ=${TZ}
-    logging:
-      <<: *logging
-  nginx:
-    image: nginx:1.19-alpine
-    command: /bin/sh -c "envsubst '$${BOT_HTTP_HOST},$${BOT_HTTP_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'"
-    environment:
-      - BOT_HTTP_HOST=${BOT_HTTP_HOST:-localhost}
-      - BOT_HTTP_PORT=${BOT_HTTP_PORT}
     volumes:
-      - ${CONF_DIR:-./}nginx.conf:/etc/nginx/nginx.conf.template
+      - data:/data
     ports:
-      - 80:80
-    depends_on:
-      - bot
+      - 9000:9000
     logging:
       <<: *logging
 
 volumes:
   data:
-    driver: local-persist
-    driver_opts:
-      mountpoint: ${BOT_MOUNT_DIR}
-  db-data:
-    driver: local-persist
-    driver_opts:
-      mountpoint: ${DB_MOUNT_DIR}

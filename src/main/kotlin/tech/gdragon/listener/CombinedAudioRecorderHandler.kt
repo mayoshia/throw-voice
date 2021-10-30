@@ -156,6 +156,7 @@ class CombinedAudioRecorderHandler(
       }
     }
 
+    recordingSize = 0
     subject = PublishSubject.create()
     ulid = ULID.random()
     filename = "$dataDirectory/recordings/$ulid.$fileFormat"
@@ -171,19 +172,18 @@ class CombinedAudioRecorderHandler(
       vbr
     )
 
-    BotUtils.sendMessage(
-      defaultChannel, """:red_circle: **Recording audio on <#${voiceChannel.id}>**
-      |_Session ID: `${session}`_
-      |.
-      |.
-      |.
-      |:warning: _`save` before stopping recording, otherwise recording will be deleted FOREVER!_
-      """.trimMargin()
-    )
+//    BotUtils.sendMessage(
+//      defaultChannel, """:red_circle: **Recording audio on <#${voiceChannel.id}>**
+//      |_Session ID: `${session}`_
+//      |.
+//      |.
+//      |.
+//      |:warning: _`save` before stopping recording, otherwise recording will be deleted FOREVER!_
+//      """.trimMargin()
+//    )
     logger.info { "Creating recording session - $queueFilename" }
 
     val singleObservable = subject
-      ?.doOnNext { isAfk(it.users.size) }
       ?.map { it.getAudioData(volume) }
       ?.buffer(BUFFER_TIMEOUT, TimeUnit.MILLISECONDS, BUFFER_MAX_COUNT)
       ?.flatMap { byteArrays ->
@@ -318,46 +318,80 @@ class CombinedAudioRecorderHandler(
   }
 
   fun saveClip(seconds: Long, voiceChannel: VoiceChannel?, channel: TextChannel) {
-/*    // Stop recording so that we can copy Queue File
     canReceive = false
+    val recordingLock = Semaphore(1, false)
+    val recordingId = ulid
 
-    val path = Paths.get(queueFilename)
-    val clipPath = Paths.get("$dataDirectory/recordings/clip-${UUID.randomUUID()}.queue")
+    logger.debug { "Creating subscription for recording: $recordingId" }
+    val disposable = single?.subscribe { queueFile, e ->
+      e?.let { ex ->
+        logger.error(ex) { "Error on subscription on saveRecording: $recordingId" }
+      }
 
-    // Copy the original Queue File so that we can resume receiving audio
-    Files.copy(path, clipPath, StandardCopyOption.REPLACE_EXISTING)
-    canReceive = true
+      val recordingFile = queueFile?.let {
+        var clipRecordingSize = recordingSize.toLong()
 
-    val queueFile = QueueFile(clipPath.toFile())
-    val filenameExtension = if (pcmMode) "pcm" else "mp3"
-    val recording = File(clipPath.toString().replace("queue", filenameExtension))
-    var clipRecordingSize = recordingSize.toLong()
-
-    // Reduce the queue size until it's just over the expected clip size
-    while (clipRecordingSize - queueFile.peek().size > BYTES_PER_SECOND * seconds) {
-      queueFile.remove()
-      clipRecordingSize -= queueFile.peek().size
-    }
-
-    FileOutputStream(recording).use {
-      queueFile.apply {
-        forEach { stream, _ ->
-          stream.transferTo(it)
+        // Reduce the queue size until it's just over the expected clip size
+        while (clipRecordingSize - it.peek().size > BYTES_PER_SECOND * seconds) {
+          it.remove()
+          if (it.peek() != null) {
+            clipRecordingSize -= it.peek().size
+          } else {
+            break
+          }
         }
+        logger.info { "Completed recording: $recordingId, queue file size: ${it.size()}" }
+        File(it.fileBuffer.canonicalPath.replace("queue", "mp3"))
+      }
 
-        close()
-        Files.delete(clipPath)
+      // TODO: Convert Queue file to MP3 file, make own function in BotUtils
+      FileOutputStream(recordingFile!!).use {
+        queueFile.apply {
+          try {
+            forEach { stream, _ ->
+              stream.transferTo(it)
+            }
+          } catch (e: IOException) {
+            logger.warn(e) {
+              "Could not generate MP3 file from Queue: ${recordingFile.absolutePath}: ${queueFile.fileBuffer.canonicalPath}"
+            }
+          } finally {
+            close()
+          }
+        }
+      }
+
+      logger.info {
+        "Saving audio file ${recordingFile.name} - ${FileUtils.byteCountToDisplaySize(recordingFile.length())}."
+      }
+
+      logger.debug {
+        "Recording size in bytes: $recordingSize"
+      }
+
+      withLoggingContext("sessionId" to session) {
+        uploadRecording(recordingFile, voiceChannel, channel)
+        logger.debug {
+          "Releasing lock in saveRecording subscription on id: $recordingId"
+        }
+        recordingLock.release(1)
       }
     }
 
-    val recordingSizeInMB = FileUtils.byteCountToDisplaySize(recording.length())
-    logger.info {
-      "Saving audio clip ${recording.name} - $recordingSizeInMB."
-    }
+    // Add subscriber to composite disposable
+    disposable?.let(compositeDisposable::add)
 
-    withLoggingContext("sessionId" to session) {
-      uploadRecording(recording, voiceChannel, channel)
-    }*/
+    logger.debug {
+      "Acquiring lock in saveRecording on recording: $recordingId"
+    }
+    logger.debug { "Marking observable as completed for recording: $recordingId" }
+    subject?.onComplete()
+
+    // Resume recording
+    compositeDisposable.reset()
+    recordingLock.acquire(1) // what could go wrong?
+    single = createRecording()
+    logger.info { "Cannot wait! Creating a new recording: $recordingId" }
   }
 
   private fun uploadRecording(recording: File, voiceChannel: VoiceChannel?, channel: TextChannel) {
@@ -390,9 +424,6 @@ class CombinedAudioRecorderHandler(
 
           val message = """|:microphone2: **Recording for <#${voiceChannel?.id}> has been uploaded!**
                            |${result.url}
-                           |
-                           |_Recording will only be available for 24hrs_
-                           |---
                            |""".trimMargin()
 
           BotUtils.sendMessage(channel, message)
