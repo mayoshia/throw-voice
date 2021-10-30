@@ -9,8 +9,6 @@ x-logging: &logging
 services:
   bot:
     image: mayoshia/pawa
-#    depends_on:
-#      - datastore
     deploy:
       resources:
         limits:
@@ -24,11 +22,7 @@ services:
       - BOT_MP3_VBR=false
       - BOT_STANDALONE=true
       - BOT_TOKEN=NTYzNDQzNTI4NzI3MDAzMTM3.XKZZrQ.GKAZ_andI15jUwW10sAEqNFK3rw
-      - DS_ACCESS_KEY=MiNiOkEy
-#      - DS_BASEURL=http://localhost:9000/recordings
       - DS_BUCKET=recordings
-#      - DS_HOST=http://localhost:9000
-#      - DS_SECRET_KEY=DS_SECRET_KEY
       - TZ=Europe/Moscow
       - JAVA_TOOL_OPTIONS=-Dlog4j.configurationFile=log4j2.xml
     ports:
@@ -39,24 +33,3 @@ services:
       - ./logs:/app/logs
     logging:
       <<: *logging
-  datastore:
-    image: minio/minio:RELEASE.2021-03-04T00-53-13Z
-    command: server /data
-    deploy:
-      resources:
-        limits:
-          cpus: 1
-          memory: 1G
-    environment:
-      - MINIO_ACCESS_KEY=MiNiOkEy
-      - MINIO_SECRET_KEY=DS_SECRET_KEY
-      - TZ=${TZ}
-    volumes:
-      - data:/data
-    ports:
-      - 9000:9000
-    logging:
-      <<: *logging
-
-volumes:
-  data:
