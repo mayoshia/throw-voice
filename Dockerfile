@@ -14,18 +14,14 @@ ARG VERSION
 RUN mvn -B -Dversion="${VERSION}" -Dtimestamp="${BUILD_DATE}" -Drevision="${VCS_REF}" package
 
 FROM gcr.io/distroless/java:11
-LABEL maintainer="Jose V. Trigueros <jose@gdragon.tech>"
+LABEL maintainer="Sergey Agulenko <sergey.agulenko@gmail.com>"
 
 ARG BUILD_DATE
 ARG VCS_REF
 ARG VERSION
 LABEL org.label-schema.build-date=$BUILD_DATE \
-      org.label-schema.name="pawa" \
-      org.label-schema.description="A voice channel recording bot for Discord." \
-      org.label-schema.url="https://pawa.im" \
-      org.label-schema.vcs-ref=$VCS_REF \
-      org.label-schema.vcs-url="https://gitlab.com/pawabot/pawa" \
-      org.label-schema.vendor="Guacamole Dragon, LLC" \
+      org.label-schema.name="mayoshia-pawa" \
+      org.label-schema.description="Custom version of Pawa discord bot." \
       org.label-schema.version=$VERSION \
       org.label-schema.schema-version="1.0"
 
